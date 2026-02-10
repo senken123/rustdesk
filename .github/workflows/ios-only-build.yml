@@ -132,27 +132,67 @@ jobs:
       - name: Build rustdesk IPA
         shell: bash
         run: |
+          set -e  # Exit on error
           pushd flutter
+          
           # Verify library is accessible from flutter directory
+          echo "=== Checking library file ==="
           ls -lh ../target/aarch64-apple-ios/release/liblibrustdesk.a
           
-          # Build IPA without code signing
-          echo "Building iOS IPA..."
-          flutter build ipa --release --no-codesign
+          # Build iOS app first
+          echo "=== Building iOS app ==="
+          flutter build ios --release --no-codesign || {
+            echo "ERROR: flutter build ios failed"
+            exit 1
+          }
+          
+          # Check if .app was created
+          echo "=== Checking for .app bundle ==="
+          if [ -d "build/ios/iphoneos/Runner.app" ]; then
+            echo "✓ Runner.app created successfully"
+            ls -lh build/ios/iphoneos/Runner.app
+          else
+            echo "ERROR: Runner.app not found"
+            echo "=== Listing build/ios directory ==="
+            ls -lah build/ios/ || echo "build/ios does not exist"
+            exit 1
+          fi
+          
+          # Try to build IPA
+          echo "=== Building IPA ==="
+          flutter build ipa --release --no-codesign || {
+            echo "WARNING: flutter build ipa failed, but .app exists"
+            echo "=== Attempting manual IPA creation ==="
+            
+            # Create Payload directory structure
+            mkdir -p build/ios/ipa/Payload
+            cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+            
+            # Create IPA (which is just a zip file)
+            cd build/ios/ipa
+            zip -r RustDesk.ipa Payload
+            cd ../../..
+            
+            echo "✓ Manually created IPA"
+          }
           
           # Verify IPA was created
-          echo "Checking for generated IPA files..."
-          ls -lh build/ios/ipa/ || echo "IPA directory not found"
-          find build/ios -name "*.ipa" -type f || echo "No IPA files found"
+          echo "=== Checking for IPA files ==="
+          find build/ios -name "*.ipa" -type f -exec ls -lh {} \; || echo "No IPA files found"
+          
           popd
 
       - name: List build outputs
         if: always()
         run: |
           echo "=== Flutter build directory structure ==="
-          find flutter/build/ios -type f -name "*.ipa" || echo "No IPA files found"
-          echo "=== All files in flutter/build/ios/ipa ==="
-          ls -lah flutter/build/ios/ipa/ || echo "Directory does not exist"
+          find flutter/build/ios -type f -name "*.ipa" -exec ls -lh {} \; || echo "No IPA files found"
+          echo ""
+          echo "=== All files in flutter/build/ios ==="
+          ls -lah flutter/build/ios/ || echo "Directory does not exist"
+          echo ""
+          echo "=== Checking for .app bundle ==="
+          ls -lah flutter/build/ios/iphoneos/ || echo "iphoneos directory does not exist"
 
       - name: Upload IPA Artifacts
         if: env.UPLOAD_ARTIFACT == 'true'
