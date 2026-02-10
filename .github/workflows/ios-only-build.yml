@@ -105,6 +105,11 @@ jobs:
           rustup target add ${{ matrix.job.target }}
           cargo build --features flutter,hwcodec --release --target aarch64-apple-ios --lib
           
+      - name: Verify library file
+        run: |
+          ls -lh target/aarch64-apple-ios/release/liblibrustdesk.a
+          file target/aarch64-apple-ios/release/liblibrustdesk.a
+          
       - name: Upload liblibrustdesk.a Artifacts
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
@@ -112,14 +117,30 @@ jobs:
           name: liblibrustdesk.a
           path: target/aarch64-apple-ios/release/liblibrustdesk.a
 
-      - name: Build rustdesk
+      - name: Build rustdesk IPA
         shell: bash
         run: |
           pushd flutter
-          # flutter build ipa --release --obfuscate --split-debug-info=./split-debug-info --no-codesign
-          # for easy debugging
+          # Verify library is accessible from flutter directory
+          ls -lh ../target/aarch64-apple-ios/release/liblibrustdesk.a
+          
+          # Build IPA without code signing
+          echo "Building iOS IPA..."
           flutter build ipa --release --no-codesign
+          
+          # Verify IPA was created
+          echo "Checking for generated IPA files..."
+          ls -lh build/ios/ipa/ || echo "IPA directory not found"
+          find build/ios -name "*.ipa" -type f || echo "No IPA files found"
           popd
+
+      - name: List build outputs
+        if: always()
+        run: |
+          echo "=== Flutter build directory structure ==="
+          find flutter/build/ios -type f -name "*.ipa" || echo "No IPA files found"
+          echo "=== All files in flutter/build/ios/ipa ==="
+          ls -lah flutter/build/ios/ipa/ || echo "Directory does not exist"
 
       - name: Upload IPA Artifacts
         if: env.UPLOAD_ARTIFACT == 'true'
