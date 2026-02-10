@@ -182,6 +182,32 @@ jobs:
           
           popd
 
+      - name: Check for build errors
+        if: always()
+        run: |
+          echo "=== Checking for Flutter build logs ==="
+          if [ -f "flutter/.flutter-plugins" ]; then
+            echo "Flutter plugins loaded successfully"
+          fi
+          
+          echo ""
+          echo "=== Checking Xcode build logs ==="
+          find flutter/build/ios -name "*.log" -type f -exec echo "Found log: {}" \; -exec cat {} \; || echo "No log files found"
+          
+          echo ""
+          echo "=== Checking for common build issues ==="
+          if [ -d "flutter/ios/Pods" ]; then
+            echo "✓ CocoaPods dependencies installed"
+          else
+            echo "✗ CocoaPods Pods directory not found"
+          fi
+          
+          if [ -f "flutter/ios/Podfile.lock" ]; then
+            echo "✓ Podfile.lock exists"
+          else
+            echo "✗ Podfile.lock not found"
+          fi
+
       - name: List build outputs
         if: always()
         run: |
@@ -194,18 +220,46 @@ jobs:
           echo "=== Checking for .app bundle ==="
           ls -lah flutter/build/ios/iphoneos/ || echo "iphoneos directory does not exist"
 
+      - name: Package .app as zip for distribution
+        if: always()
+        run: |
+          if [ -d "flutter/build/ios/iphoneos/Runner.app" ]; then
+            echo "Packaging Runner.app as zip..."
+            cd flutter/build/ios/iphoneos
+            zip -r RustDesk-${{ env.VERSION }}-${{ matrix.job.arch }}.zip Runner.app
+            mv RustDesk-${{ env.VERSION }}-${{ matrix.job.arch }}.zip ../../../..
+            cd ../../../..
+            ls -lh RustDesk-${{ env.VERSION }}-${{ matrix.job.arch }}.zip
+          else
+            echo "Runner.app not found, skipping zip creation"
+          fi
+
       - name: Upload IPA Artifacts
         if: env.UPLOAD_ARTIFACT == 'true'
+        continue-on-error: true
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.ipa
-          path: flutter/build/ios/ipa/*.ipa
+          path: |
+            flutter/build/ios/ipa/*.ipa
+            flutter/build/ios/ipa/RustDesk.ipa
+
+      - name: Upload .app.zip Artifacts (fallback)
+        if: env.UPLOAD_ARTIFACT == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.app.zip
+          path: RustDesk-${{ env.VERSION }}-${{ matrix.job.arch }}.zip
 
       - name: Publish ipa package
         if: env.UPLOAD_ARTIFACT == 'true'
+        continue-on-error: true
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
             flutter/build/ios/ipa/*.ipa
+            flutter/build/ios/ipa/RustDesk.ipa
+            RustDesk-${{ env.VERSION }}-${{ matrix.job.arch }}.zip
