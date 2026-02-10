@@ -100,6 +100,12 @@ jobs:
           name: bridge-artifact
           path: ./
 
+      - name: Install Flutter dependencies
+        run: |
+          cd flutter
+          flutter pub get
+          cd ..
+
       - name: Build rustdesk lib
         run: |
           rustup target add ${{ matrix.job.target }}
@@ -116,6 +122,12 @@ jobs:
         with:
           name: liblibrustdesk.a
           path: target/aarch64-apple-ios/release/liblibrustdesk.a
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd flutter/ios
+          pod install
+          cd ../..
 
       - name: Build rustdesk IPA
         shell: bash
